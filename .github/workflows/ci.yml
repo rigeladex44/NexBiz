@@ -1,0 +1,42 @@
+name: validation
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smartbiz
+          POSTGRES_PASSWORD: development-only
+          POSTGRES_DB: smartbiz
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U smartbiz" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://smartbiz:development-only@localhost:5432/smartbiz
+      APP_ORIGIN: http://localhost:3000
+      DEMO_PASSWORD: CI-only-demo-2026!
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: cp .env.example .env
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run db:generate
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run typecheck && npm run lint && npm test
+      - run: npm run build
+      - run: PGPASSWORD=development-only psql -h localhost -U smartbiz -d smartbiz -c 'CREATE DATABASE smartbiz_test'
+      - run: npm run db:migrate && npm run test:api
+        env:
+          DATABASE_URL: postgresql://smartbiz:development-only@localhost:5432/smartbiz_test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: { name: playwright-report, path: playwright-report/ }

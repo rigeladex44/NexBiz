@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum Role {
+  OWNER
+  SUPERVISOR
+  CASHIER
+}
+enum PaymentMethod {
+  CASH
+  NON_CASH
+}
+model Tenant {
+  id String @id @default(uuid()) @db.Uuid
+  slug String @unique
+  name String
+  industry String
+  active Boolean @default(true)
+  memberships Membership[]
+  outlets Outlet[]
+  products Product[]
+  sales Sale[]
+  shifts Shift[]
+  movements StockMovement[]
+  audits AuditLog[]
+}
+model User {
+  id String @id @default(uuid()) @db.Uuid
+  email String @unique
+  name String
+  passwordHash String
+  memberships Membership[]
+}
+model Membership {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  userId String @db.Uuid
+  role Role
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  user User @relation(fields:[userId],references:[id])
+  sessions UserSession[]
+  shifts Shift[]
+  @@unique([tenantId,userId])
+  @@unique([tenantId,id])
+}
+model UserSession {
+  id String @id @default(uuid()) @db.Uuid
+  tokenHash String @unique
+  membershipId String @db.Uuid
+  expiresAt DateTime
+  membership Membership @relation(fields:[membershipId],references:[id],onDelete:Cascade)
+  @@index([expiresAt])
+}
+model Outlet {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  name String
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  balances StockBalance[]
+  sales Sale[]
+  shifts Shift[]
+  movements StockMovement[]
+  @@unique([tenantId,id])
+}
+model Product {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  name String
+  sku String
+  price Decimal @db.Decimal(18,2)
+  cost Decimal @db.Decimal(18,2)
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  balances StockBalance[]
+  movements StockMovement[]
+  lines SaleLine[]
+  @@unique([tenantId,sku])
+  @@unique([tenantId,id])
+  @@index([tenantId,name])
+}
+model StockBalance {
+  tenantId String @db.Uuid
+  outletId String @db.Uuid
+  productId String @db.Uuid
+  quantity Int @default(0)
+  outlet Outlet @relation(fields:[tenantId,outletId],references:[tenantId,id])
+  product Product @relation(fields:[tenantId,productId],references:[tenantId,id])
+  @@id([tenantId,outletId,productId])
+}
+model Shift {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  outletId String @db.Uuid
+  membershipId String @db.Uuid
+  openedAt DateTime @default(now())
+  closedAt DateTime?
+  openingCash Decimal @db.Decimal(18,2)
+  countedCash Decimal? @db.Decimal(18,2)
+  expectedCash Decimal? @db.Decimal(18,2)
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  outlet Outlet @relation(fields:[tenantId,outletId],references:[tenantId,id])
+  membership Membership @relation(fields:[tenantId,membershipId],references:[tenantId,id])
+  sales Sale[]
+  @@unique([tenantId,id])
+  @@index([tenantId,membershipId,closedAt])
+}
+model Sale {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  outletId String @db.Uuid
+  shiftId String @db.Uuid
+  idempotencyKey String @db.Uuid
+  requestHash String
+  total Decimal @db.Decimal(18,2)
+  cost Decimal @db.Decimal(18,2)
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  outlet Outlet @relation(fields:[tenantId,outletId],references:[tenantId,id])
+  shift Shift @relation(fields:[tenantId,shiftId],references:[tenantId,id])
+  lines SaleLine[]
+  payments Payment[]
+  movements StockMovement[]
+  @@unique([tenantId,idempotencyKey])
+  @@unique([tenantId,id])
+  @@index([tenantId,createdAt])
+}
+model SaleLine {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  saleId String @db.Uuid
+  productId String @db.Uuid
+  name String
+  quantity Int
+  unitPrice Decimal @db.Decimal(18,2)
+  unitCost Decimal @db.Decimal(18,2)
+  sale Sale @relation(fields:[tenantId,saleId],references:[tenantId,id])
+  product Product @relation(fields:[tenantId,productId],references:[tenantId,id])
+  @@index([tenantId,saleId])
+}
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  saleId String @db.Uuid
+  method PaymentMethod
+  amount Decimal @db.Decimal(18,2)
+  status String @default("RECORDED")
+  sale Sale @relation(fields:[tenantId,saleId],references:[tenantId,id])
+  @@index([tenantId,saleId])
+}
+model StockMovement {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  outletId String @db.Uuid
+  productId String @db.Uuid
+  saleId String? @db.Uuid
+  delta Int
+  reason String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  outlet Outlet @relation(fields:[tenantId,outletId],references:[tenantId,id])
+  product Product @relation(fields:[tenantId,productId],references:[tenantId,id])
+  sale Sale? @relation(fields:[tenantId,saleId],references:[tenantId,id])
+  @@index([tenantId,outletId,productId,createdAt])
+}
+model AuditLog {
+  id String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  actorId String @db.Uuid
+  action String
+  entityId String
+  createdAt DateTime @default(now())
+  tenant Tenant @relation(fields:[tenantId],references:[id])
+  @@index([tenantId,createdAt])
+}

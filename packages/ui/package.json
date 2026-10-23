@@ -1,0 +1,5 @@
+{
+  "name": "@nexalid/ui",
+  "private": true,
+  "main": "src/button.tsx"
+}

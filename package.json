@@ -1,0 +1,42 @@
+{
+  "name": "nexalid-smartbiz",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @nexalid/api\" \"npm run dev -w @nexalid/web\"",
+    "build": "npm run build -w @nexalid/api && npm run build -w @nexalid/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint apps packages tests",
+    "test": "node --import tsx --test tests/unit.test.ts",
+    "test:api": "node --env-file=.env --import tsx --test tests/api.test.ts",
+    "test:e2e": "playwright test",
+    "db:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "db:migrate": "prisma migrate deploy --schema apps/api/prisma/schema.prisma",
+    "db:seed": "node --env-file=.env --import tsx apps/api/prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.22.0",
+    "@playwright/test": "^1.51.1",
+    "@types/node": "^22.13.10",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.22.0",
+    "prettier": "^3.9.10",
+    "prisma": "6.19.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.26.0"
+  },
+  "overrides": {
+    "@prisma/config": {
+      "effect": "^3.20.0",
+      "deepmerge-ts": "^8.0.2"
+    }
+  }
+}

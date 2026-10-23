@@ -1,0 +1,75 @@
+name: nexalid
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: smartbiz
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: smartbiz
+    ports: ['127.0.0.1:5432:5432']
+    volumes: ['postgres_data:/var/lib/postgresql/data']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U smartbiz -d smartbiz']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    ports: ['127.0.0.1:6379:6379']
+    volumes: ['redis_data:/data']
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  migrate:
+    image: nexalid:local
+    build: .
+    environment:
+      DATABASE_URL: postgresql://smartbiz:${POSTGRES_PASSWORD}@postgres:5432/smartbiz?schema=public
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      postgres: { condition: service_healthy }
+    profiles: ['app']
+  api:
+    image: nexalid:local
+    build: .
+    environment:
+      DATABASE_URL: postgresql://smartbiz:${POSTGRES_PASSWORD}@postgres:5432/smartbiz?schema=public
+      REDIS_URL: redis://redis:6379
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:3000}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4000
+    command: ['npm', 'run', 'start', '-w', '@nexalid/api']
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    profiles: ['app']
+    restart: unless-stopped
+  web:
+    image: nexalid:local
+    build: .
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    ports: ['3000:3000']
+    depends_on:
+      api: { condition: service_healthy }
+    profiles: ['app']
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  redis_data:
